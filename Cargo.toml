@@ -22,3 +22,4 @@ uuid = { version = "0.8.1", features = ["serde", "v4"] }
 chrono = "0.4.11"
 tmq = { path = "/home/cetra/git/tmq" }
 postgres-types = { version = "0.1", features = ["derive"] }
+async-trait = "0.1.24"
