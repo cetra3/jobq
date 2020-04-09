@@ -11,6 +11,7 @@ END$$;
 CREATE TABLE IF NOT EXISTS jobq (
     id bigserial primary key,
     name text,
+    username text,
     uuid uuid,
     params jsonb,
     priority "Priority",

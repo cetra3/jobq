@@ -12,7 +12,7 @@ use tokio::time::delay_for;
 
 use jobq::server::Server;
 use jobq::worker::{Processor, TestWorker};
-use jobq::{JobRequest, JobqMessage, Priority};
+use jobq::{ClientMessage, JobRequest, Priority, ServerMessage, ToMpart};
 
 #[derive(StructOpt, Clone, Debug, PartialEq)]
 #[structopt(name = "jobq", about = "ZeroMQ Job Queue")]
@@ -43,9 +43,9 @@ pub struct ConfigContext {
 
 async fn get_message<S: TryStream<Ok = Multipart, Error = TmqError> + Unpin>(
     recv: &mut S,
-) -> Result<JobqMessage, Error> {
+) -> Result<ClientMessage, Error> {
     if let Some(msg) = recv.try_next().await? {
-        let jobq_message: JobqMessage = serde_cbor::from_slice(&msg[0])?;
+        let jobq_message: ClientMessage = serde_cbor::from_slice(&msg[0])?;
 
         Ok(jobq_message)
     } else {
@@ -73,9 +73,7 @@ async fn setup() -> Result<(), Error> {
     let worker_config = config.clone();
 
     tokio::spawn(async move {
-        let mut worker = TestWorker;
-
-        if let Err(err) = worker.work(&worker_config.job_address).await {
+        if let Err(err) = TestWorker.work(&worker_config.job_address).await {
             error!("{}", err);
         }
     });
@@ -86,12 +84,12 @@ async fn setup() -> Result<(), Error> {
         .split::<Multipart>();
 
     //Send hello
-    send.send(JobqMessage::Hello.to_mpart()?).await?;
+    send.send(ClientMessage::Hello.to_mpart()?).await?;
 
-    if let JobqMessage::Hello = get_message(&mut recv).await? {
+    if let ClientMessage::Hello = get_message(&mut recv).await? {
         debug!("Received Hello response, sending a couple of jobs");
 
-        for i in 0..50 {
+        for i in 0..500 {
             let priority = if i % 2 == 0 {
                 Priority::High
             } else {
@@ -100,12 +98,13 @@ async fn setup() -> Result<(), Error> {
 
             let job = JobRequest {
                 name: "test".into(),
+                username: "test_client".into(),
                 params: Value::Null,
                 uuid: Uuid::new_v4(),
                 priority,
             };
 
-            send.send(JobqMessage::Request(job).to_mpart()?).await?;
+            send.send(ServerMessage::Request(job).to_mpart()?).await?;
         }
 
         debug!("Done!");

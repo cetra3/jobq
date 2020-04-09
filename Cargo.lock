@@ -1087,6 +1087,7 @@ dependencies = [
 [[package]]
 name = "tmq"
 version = "0.2.0"
+source = "git+https://github.com/cetra3/tmq?branch=split_sockets#0175e22e9afd440838a5b8d82acfbcffb6b8e09a"
 dependencies = [
  "bytes",
  "futures",

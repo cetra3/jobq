@@ -56,14 +56,16 @@ impl DbHandle {
         for row in result {
             let id = row.get(0);
             let name = row.get(1);
-            let uuid = row.get(2);
-            let params = row.get(3);
-            let priority = row.get(4);
-            let status = row.get(5);
+            let username = row.get(2);
+            let uuid = row.get(3);
+            let params = row.get(4);
+            let priority = row.get(5);
+            let status = row.get(6);
 
             jobs.push({
                 Job {
                     id,
+                    username,
                     name,
                     uuid,
                     params,
@@ -77,24 +79,33 @@ impl DbHandle {
     }
 
     pub(crate) async fn get_processing_jobs(&self) -> Result<Vec<Job>, Error> {
-        let query = "select id, name, uuid, params, priority, status from jobq where status = 'Processing' order by priority asc, time asc";
+        let query = "select id, name, username, uuid, params, priority, status from jobq where status = 'Processing' order by priority asc, time asc";
 
         DbHandle::get_jobs(self.client.query(query, &[]).await?)
     }
 
     pub(crate) async fn get_queued_jobs(&self, num: i64) -> Result<Vec<Job>, Error> {
-        let query = "select id, name, uuid, params, priority, status from jobq where status = 'Queued' order by priority asc, time asc limit $1";
+        let query = "select id, name, username, uuid, params, priority, status from jobq where status = 'Queued' order by priority asc, time asc limit $1";
 
         DbHandle::get_jobs(self.client.query(query, &[&num]).await?)
     }
 
     pub(crate) async fn submit_job_request(&self, job: &JobRequest) -> Result<i64, Error> {
         let query =
-            "INSERT into jobq (name, uuid, params, priority, status) values ($1, $2, $3, $4, 'Queued') returning id";
+            "INSERT into jobq (name, username, uuid, params, priority, status) values ($1, $2, $3, $4, $5, 'Queued') returning id";
 
         let result = self
             .client
-            .query(query, &[&job.name, &job.uuid, &job.params, &job.priority])
+            .query(
+                query,
+                &[
+                    &job.name,
+                    &job.username,
+                    &job.uuid,
+                    &job.params,
+                    &job.priority,
+                ],
+            )
             .await?;
 
         Ok(result[0].get(0))

@@ -10,17 +10,29 @@ pub mod server;
 pub mod worker;
 
 #[derive(Serialize, Deserialize, Debug)]
-pub enum JobqMessage {
+pub enum ServerMessage {
     Hello,
     Request(JobRequest),
-    Order(Job),
     Completed(Job),
     Failed(Job, String),
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub enum ClientMessage {
+    Hello,
+    Acknowledged(Job),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum WorkerMessage {
+    Hello,
+    Order(Job),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct JobRequest {
     pub name: String,
+    pub username: String,
     pub uuid: Uuid,
     pub params: Value,
     pub priority: Priority,
@@ -29,6 +41,7 @@ pub struct JobRequest {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Job {
     pub id: i64,
+    pub username: String,
     pub name: String,
     pub uuid: Uuid,
     pub params: Value,
@@ -51,13 +64,20 @@ pub enum Priority {
     Low,
 }
 
-impl JobqMessage {
-    pub fn to_mpart(self) -> Result<Multipart, Error> {
+pub trait ToMpart {
+    fn to_mpart(&self) -> Result<Multipart, Error>;
+
+    fn to_msg(&self) -> Result<Message, Error>;
+}
+
+impl<T: serde::ser::Serialize> ToMpart for T {
+    fn to_mpart(&self) -> Result<Multipart, Error> {
         let bytes = serde_cbor::to_vec(&self)?;
 
         Ok(Multipart::from(vec![&bytes]))
     }
-    pub fn to_msg(self) -> Result<Message, Error> {
+
+    fn to_msg(&self) -> Result<Message, Error> {
         let bytes = serde_cbor::to_vec(&self)?;
 
         Ok(Message::from(&bytes))
