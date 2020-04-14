@@ -38,7 +38,7 @@ pub struct JobRequest {
     pub priority: Priority,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Job {
     pub id: i64,
     pub username: String,
@@ -49,7 +49,7 @@ pub struct Job {
     pub status: Status,
 }
 
-#[derive(Serialize, Deserialize, Debug, ToSql, FromSql)]
+#[derive(Serialize, Deserialize, Debug, Clone, ToSql, FromSql)]
 pub enum Status {
     Queued,
     Processing,
@@ -57,7 +57,7 @@ pub enum Status {
     Failed,
 }
 
-#[derive(Serialize, Deserialize, Debug, ToSql, FromSql)]
+#[derive(Serialize, Deserialize, Debug, Clone, ToSql, FromSql)]
 pub enum Priority {
     High,
     Normal,

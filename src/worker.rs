@@ -1,5 +1,5 @@
 use crate::{Job, ServerMessage, ToMpart, WorkerMessage};
-use anyhow::Error;
+use anyhow::{anyhow, Error};
 use async_trait::async_trait;
 use futures::{channel::mpsc::unbounded, future::ready, SinkExt, StreamExt};
 use log::*;
@@ -11,7 +11,7 @@ use tokio::time::delay_for;
 pub trait Processor: Sized {
     const JOB_TYPE: &'static str;
 
-    async fn process(&self, job: Job) -> Status;
+    async fn process(&self, job: Job) -> Result<(), Error>;
 
     async fn work(&self, job_address: &str) -> Result<(), Error> {
         let job_type = Self::JOB_TYPE;
@@ -61,19 +61,15 @@ pub trait Processor: Sized {
 
             return ready(None);
         })
-        .map(|job| (self.process(job), send.clone()))
-        .for_each_concurrent(None, |(status, mut send)| async move {
-            match status.await {
-                Status::Completed(job) => {
-                    if let Err(err) = send.send(ServerMessage::Completed(job)).await {
-                        error!("Error sending completed message: {}", err);
-                    }
-                }
-                Status::Failed(job, reason) => {
-                    if let Err(err) = send.send(ServerMessage::Failed(job, reason)).await {
-                        error!("Error sending failed message:{}", err);
-                    }
-                }
+        .map(|job| (self.process(job.clone()), send.clone(), job))
+        .for_each_concurrent(None, |(status, mut send, job)| async move {
+            let server_message = match status.await {
+                Ok(()) => ServerMessage::Completed(job),
+                Err(err) => ServerMessage::Failed(job, err.to_string()),
+            };
+
+            if let Err(err) = send.send(server_message).await {
+                error!("Error sending server message: {}", err);
             }
         })
         .await;
@@ -81,24 +77,18 @@ pub trait Processor: Sized {
         Ok(())
     }
 }
-
-pub enum Status {
-    Completed(Job),
-    Failed(Job, String),
-}
-
 pub struct TestWorker;
 
 #[async_trait]
 impl Processor for TestWorker {
     const JOB_TYPE: &'static str = "test";
 
-    async fn process(&self, job: Job) -> Status {
+    async fn process(&self, job: Job) -> Result<(), Error> {
         delay_for(Duration::from_millis(100)).await;
         if job.id % 12 == 0 {
-            Status::Failed(job, "Simulating failure".into())
-        } else {
-            Status::Completed(job)
+            return Err(anyhow!("Simulating failure"));
         }
+
+        Ok(())
     }
 }

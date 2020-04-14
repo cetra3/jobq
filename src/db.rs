@@ -54,13 +54,13 @@ impl DbHandle {
         let mut jobs = Vec::new();
 
         for row in result {
-            let id = row.get(0);
-            let name = row.get(1);
-            let username = row.get(2);
-            let uuid = row.get(3);
-            let params = row.get(4);
-            let priority = row.get(5);
-            let status = row.get(6);
+            let id = row.try_get(0)?;
+            let name = row.try_get(1)?;
+            let username = row.try_get(2)?;
+            let uuid = row.try_get(3)?;
+            let params = row.try_get(4)?;
+            let priority = row.try_get(5)?;
+            let status = row.try_get(6)?;
 
             jobs.push({
                 Job {
@@ -79,13 +79,27 @@ impl DbHandle {
     }
 
     pub(crate) async fn get_processing_jobs(&self) -> Result<Vec<Job>, Error> {
-        let query = "select id, name, username, uuid, params, priority, status from jobq where status = 'Processing' order by priority asc, time asc";
+        let query = "select id, name, username, uuid, params, priority, status from jobq
+                     where status = 'Processing' order by priority asc, time asc";
 
         DbHandle::get_jobs(self.client.query(query, &[]).await?)
     }
 
     pub(crate) async fn get_queued_jobs(&self, num: i64) -> Result<Vec<Job>, Error> {
-        let query = "select id, name, username, uuid, params, priority, status from jobq where status = 'Queued' order by priority asc, time asc limit $1";
+        let query = "select 
+                        id,
+                        name,
+                        username,
+                        uuid,
+                        params,
+                        priority,
+                        status
+                     from jobq
+                     where 
+                        status = 'Queued'
+                     order by
+                     priority asc, time asc
+                     limit $1";
 
         DbHandle::get_jobs(self.client.query(query, &[&num]).await?)
     }
