@@ -80,6 +80,15 @@ impl Server {
                     };
 
                     debug!("New: {:?}", job);
+
+                    send.send(
+                        vec![
+                            Message::from(&client_name as &[u8]),
+                            ClientMessage::Acknowledged(job).to_msg()?,
+                        ]
+                        .into(),
+                    )
+                    .await?
                 }
                 Ok(ServerMessage::Completed(job)) => {
                     trace!("Job completed:{}", job.id);
