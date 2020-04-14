@@ -1087,7 +1087,8 @@ dependencies = [
 [[package]]
 name = "tmq"
 version = "0.2.0"
-source = "git+https://github.com/cetra3/tmq?branch=split_sockets#0175e22e9afd440838a5b8d82acfbcffb6b8e09a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "059b91f0d906435efb753578c8766305060a764af59d338db1439a6554a384a0"
 dependencies = [
  "bytes",
  "futures",

@@ -18,6 +18,6 @@ serde_cbor = "0.11.1"
 serde_derive = "1.0.105"
 uuid = { version = "0.8.1", features = ["serde", "v4"] }
 chrono = "0.4.11"
-tmq = { git = "https://github.com/cetra3/tmq", branch = "split_sockets" }
+tmq = "0.2.0"
 postgres-types = { version = "0.1", features = ["derive"] }
 async-trait = "0.1.24"
