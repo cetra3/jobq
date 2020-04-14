@@ -8,13 +8,13 @@ use tmq::{dealer, Context, Multipart};
 use tokio::time::delay_for;
 
 #[async_trait]
-pub trait Processor: Sized {
-    const JOB_TYPE: &'static str;
+pub trait Worker: Sized {
+    const JOB_NAME: &'static str;
 
     async fn process(&self, job: Job) -> Result<(), Error>;
 
     async fn work(&self, job_address: &str) -> Result<(), Error> {
-        let job_type = Self::JOB_TYPE;
+        let job_type = Self::JOB_NAME;
         debug!("Worker `{}` starting, sending hello", job_type);
 
         let (mut send_skt, recv) = dealer(&Context::new())
@@ -80,8 +80,8 @@ pub trait Processor: Sized {
 pub struct TestWorker;
 
 #[async_trait]
-impl Processor for TestWorker {
-    const JOB_TYPE: &'static str = "test";
+impl Worker for TestWorker {
+    const JOB_NAME: &'static str = "test";
 
     async fn process(&self, job: Job) -> Result<(), Error> {
         delay_for(Duration::from_millis(100)).await;
