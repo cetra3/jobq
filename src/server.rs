@@ -1,9 +1,7 @@
-use crate::{db::DbHandle, ClientMessage, Job, ServerMessage, Status, ToMpart, WorkerMessage};
+use crate::{db::DbHandle, router::Router, ClientMessage, Job, ServerMessage, Status};
 use anyhow::Error;
-use futures::{Sink, SinkExt, StreamExt, TryStreamExt};
+use futures::StreamExt;
 use log::*;
-use tmq::TmqError;
-use tmq::{router, Context, Message, Multipart};
 
 pub struct Server {
     connect_url: String,
@@ -26,45 +24,33 @@ impl Server {
         trace!("Connecting to db:{}", self.connect_url);
         let handle = DbHandle::new(&self.connect_url).await?;
 
-        let (mut send, mut recv) = router(&Context::new())
-            .bind(&self.job_address)?
-            .split::<Multipart>();
+        let mut router = Router::new(&self.job_address).await?;
 
         //Resubmit processing jobs
         let mut processing = handle.get_processing_jobs().await?;
 
         let mut active = processing.len();
 
-        while let Some(msg) = recv.try_next().await? {
-            let client_name = &msg[0];
-            let server_msg = serde_cbor::from_slice::<ServerMessage>(&msg[1]);
-
+        while let Some(server_msg) = router.next().await {
             trace!("Active Jobs:{}", active);
 
             match server_msg {
-                Ok(ServerMessage::Hello) => {
-                    if let Some(name) = client_name.as_str() {
-                        debug!("Ping: {}", name);
+                Ok(ServerMessage::Hello(name)) => {
+                    debug!("Ping: {}", name);
 
-                        //Drain out existing processing jobs
-                        let (jobs, outstanding): (Vec<Job>, Vec<Job>) =
-                            processing.into_iter().partition(|job| job.name == name);
+                    router.send_message(&name, ClientMessage::Hello(name.clone())).await?;
 
-                        processing = outstanding;
+                    //Drain out existing processing jobs
+                    let (jobs, outstanding): (Vec<Job>, Vec<Job>) =
+                        processing.into_iter().partition(|job| job.name == name);
 
-                        for job in jobs {
-                            send_job(&handle, job, &mut send).await?;
-                        }
+                    processing = outstanding;
+
+                    for job in jobs {
+                        send_job(&handle, job, &mut router).await?;
                     }
 
-                    send.send(
-                        vec![
-                            Message::from(&client_name as &[u8]),
-                            ClientMessage::Hello.to_msg()?,
-                        ]
-                        .into(),
-                    )
-                    .await?;
+
                 }
                 Ok(ServerMessage::Request(job_request)) => {
                     let id = handle.submit_job_request(&job_request).await?;
@@ -80,15 +66,6 @@ impl Server {
                     };
 
                     debug!("New: {:?}", job);
-
-                    send.send(
-                        vec![
-                            Message::from(&client_name as &[u8]),
-                            ClientMessage::Acknowledged(job).to_msg()?,
-                        ]
-                        .into(),
-                    )
-                    .await?
                 }
                 Ok(ServerMessage::Completed(job)) => {
                     trace!("Job completed:{}", job.id);
@@ -112,7 +89,7 @@ impl Server {
                     .await?;
 
                 for job in jobs {
-                    send_job(&handle, job, &mut send).await?;
+                    send_job(&handle, job, &mut router).await?;
                     active = active + 1;
                 }
             }
@@ -122,20 +99,13 @@ impl Server {
     }
 }
 
-async fn send_job<S: Sink<Multipart, Error = TmqError> + Unpin>(
-    handle: &DbHandle,
-    job: Job,
-    send: &mut S,
-) -> Result<(), Error> {
+async fn send_job(handle: &DbHandle, job: Job, router: &mut Router) -> Result<(), Error> {
     handle.begin_job(job.id).await?;
+    let name = &job.name;
 
-    send.send(
-        vec![
-            Message::from(job.name.as_bytes()),
-            WorkerMessage::Order(job).to_msg()?,
-        ]
-        .into(),
-    )
-    .await?;
+    router
+        .send_message(&name, ClientMessage::Order(job.clone()))
+        .await?;
+
     Ok(())
 }

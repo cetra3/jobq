@@ -1,18 +1,17 @@
-use anyhow::{anyhow, Error};
-use futures::{SinkExt, StreamExt, TryStream, TryStreamExt};
+use anyhow::Error;
+use futures::{SinkExt, StreamExt, TryStreamExt};
 use log::*;
 use serde_json::Value;
 use std::env;
 use structopt::StructOpt;
-use tmq::{dealer, Context, Multipart, TmqError};
 use uuid::Uuid;
 
 use std::time::Duration;
 use tokio::time::delay_for;
 
 use jobq::server::Server;
-use jobq::worker::{Worker, TestWorker};
-use jobq::{ClientMessage, JobRequest, Priority, ServerMessage, ToMpart};
+use jobq::worker::{TestWorker, Worker};
+use jobq::{dealer::Dealer, ClientMessage, JobRequest, Priority, ServerMessage};
 
 #[derive(StructOpt, Clone, Debug, PartialEq)]
 #[structopt(name = "jobq", about = "ZeroMQ Job Queue")]
@@ -29,7 +28,7 @@ pub struct ConfigContext {
         short = "l",
         long = "listen_address",
         help = "Jobq Listen Address",
-        default_value = "tcp://127.0.0.1:8888"
+        default_value = "127.0.0.1:8888"
     )]
     job_address: String,
     #[structopt(
@@ -39,18 +38,6 @@ pub struct ConfigContext {
         default_value = "4"
     )]
     num: usize,
-}
-
-async fn get_message<S: TryStream<Ok = Multipart, Error = TmqError> + Unpin>(
-    recv: &mut S,
-) -> Result<ClientMessage, Error> {
-    if let Some(msg) = recv.try_next().await? {
-        let jobq_message: ClientMessage = serde_cbor::from_slice(&msg[0])?;
-
-        Ok(jobq_message)
-    } else {
-        Err(anyhow!("No Messages in Stream"))
-    }
 }
 
 async fn setup() -> Result<(), Error> {
@@ -64,7 +51,7 @@ async fn setup() -> Result<(), Error> {
 
     tokio::spawn(async move {
         if let Err(err) = server.serve().await {
-            error!("{}", err);
+            error!("Error starting server: {}", err);
         }
     });
 
@@ -74,19 +61,19 @@ async fn setup() -> Result<(), Error> {
 
     tokio::spawn(async move {
         if let Err(err) = TestWorker.work(&worker_config.job_address).await {
-            error!("{}", err);
+            error!("Error starting worker: {}", err);
         }
     });
 
-    let (mut send, mut recv) = dealer(&Context::new())
-        .set_identity(b"test_client")
-        .connect(&config.job_address)?
-        .split::<Multipart>();
+    let (mut send, mut recv) = Dealer::new(&config.job_address).await?.split();
 
     //Send hello
-    send.send(ClientMessage::Hello.to_mpart()?).await?;
+    send.send(ServerMessage::Hello("Test Client".into()))
+        .await?;
+    
+    debug!("Hello sent");
 
-    if let ClientMessage::Hello = get_message(&mut recv).await? {
+    if let Some(ClientMessage::Hello(_name)) = recv.try_next().await? {
         debug!("Received Hello response, sending a couple of jobs");
 
         for i in 0..500 {
@@ -104,17 +91,17 @@ async fn setup() -> Result<(), Error> {
                 priority,
             };
 
-            send.send(ServerMessage::Request(job).to_mpart()?).await?;
+            send.send(ServerMessage::Request(job)).await?;
         }
 
         debug!("Done!");
     }
 
-    loop {
-        let message = get_message(&mut recv).await?;
-
+    while let Some(message) = recv.try_next().await? {
         debug!("Message:{:?}", message);
     }
+
+    Ok(())
 }
 
 #[tokio::main]
