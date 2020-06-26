@@ -1,5 +1,4 @@
 use anyhow::Error;
-use postgres_types::{FromSql, ToSql};
 use serde_derive::{Deserialize, Serialize};
 use serde_json::Value;
 use tmq::{Message, Multipart};
@@ -38,7 +37,7 @@ pub struct JobRequest {
     pub priority: Priority,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, sqlx::FromRow)]
 pub struct Job {
     pub id: i64,
     pub username: String,
@@ -49,7 +48,7 @@ pub struct Job {
     pub status: Status,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ToSql, FromSql)]
+#[derive(Serialize, Deserialize, Debug, Clone, sqlx::Type)]
 pub enum Status {
     Queued,
     Processing,
@@ -57,7 +56,7 @@ pub enum Status {
     Failed,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, ToSql, FromSql)]
+#[derive(Serialize, Deserialize, Debug, Clone, sqlx::Type)]
 pub enum Priority {
     High,
     Normal,

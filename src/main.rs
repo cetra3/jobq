@@ -11,7 +11,7 @@ use std::time::Duration;
 use tokio::time::delay_for;
 
 use jobq::server::Server;
-use jobq::worker::{Worker, TestWorker};
+use jobq::worker::{TestWorker, Worker};
 use jobq::{ClientMessage, JobRequest, Priority, ServerMessage, ToMpart};
 
 #[derive(StructOpt, Clone, Debug, PartialEq)]
